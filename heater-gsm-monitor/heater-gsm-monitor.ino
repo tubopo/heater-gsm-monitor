@@ -20,6 +20,7 @@ ButtonModule button;
 // State tracking
 unsigned long lastAlertTime = 0;
 int lastAlertState = -1;
+bool callBeingHandled = false;
 
 void setup()
 {
@@ -60,14 +61,19 @@ void loop()
   display.update(tempSensor.getTemperature(), tempSensor.getState(), gsm.getSignalQuality(), gsm.getOperator());
 
   // Check for incoming calls - drop and send status SMS
-  if (gsm.checkForIncomingCall())
+  bool callDetected = gsm.checkForIncomingCall();
+
+  if (callDetected && !callBeingHandled)
   {
+    // Mark that we're handling this call to prevent multiple SMS
+    callBeingHandled = true;
+
     Serial.println("[CALL] Incoming call - hanging up and sending status");
     display.displayMessage("CALL!\nSending status...");
 
     // Hang up the call
     gsm.hangupCall();
-    delay(500);
+    delay(1000); // Wait for hangup to complete
 
     // Send status SMS with current temperature and state
     gsm.sendStatusSMS(tempSensor.getTemperature(), tempSensor.getState());
@@ -82,6 +88,11 @@ void loop()
     }
 
     delay(2000); // Show message for 2 seconds
+  }
+  else if (!callDetected && callBeingHandled)
+  {
+    // Call has cleared, reset the flag
+    callBeingHandled = false;
   }
 
   // Check if temperature state changed and send alert if needed
