@@ -35,11 +35,8 @@ jobs:
       - name: Set arduino test secrets
         working-directory: heater-gsm-monitor
         run: |
-          echo
-          {
-            #define SECRET_PHONE_NUMBER "+1234567890"
-            #define SECRET_SIM_PIN "1234"
-          } >> arduino_secrets.h
+          echo '#define SECRET_PHONE_NUMBER "+1234567890"' > arduino_secrets.h
+          echo '#define SECRET_SIM_PIN "1234"' >> arduino_secrets.h
 
       - name: Compile Sketch
         run: |
