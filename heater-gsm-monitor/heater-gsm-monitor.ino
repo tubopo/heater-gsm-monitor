@@ -27,9 +27,6 @@ void setup()
   Serial.begin(BAUD_RATE);
   delay(1000);
 
-  Serial.println("\n[STARTUP] LOLIN ESP8266 NodeMCU V3 Temperature Monitor");
-  Serial.println("[STARTUP] Initializing modules...\n");
-
   // Initialize status LED
   pinMode(STATUS_LED_PIN, OUTPUT);
   digitalWrite(STATUS_LED_PIN, HIGH);
@@ -46,7 +43,6 @@ void setup()
   // Initialize GSM modem
   gsm.begin();
 
-  Serial.println("[STARTUP] Ready\n");
   digitalWrite(STATUS_LED_PIN, LOW);
 }
 
@@ -67,8 +63,6 @@ void loop()
   {
     // Mark that we're handling this call to prevent multiple SMS
     callBeingHandled = true;
-
-    Serial.println("[CALL] Incoming call - hanging up and sending status");
     display.displayMessage("CALL!\nSending status...");
 
     // Hang up the call

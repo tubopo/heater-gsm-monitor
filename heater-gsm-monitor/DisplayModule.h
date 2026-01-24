@@ -19,8 +19,6 @@ public:
 
   void begin()
   {
-    Serial.println("[DISPLAY] Initializing SSD1306...");
-
     // Initialize I2C on custom pins
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
@@ -36,8 +34,6 @@ public:
     display.setCursor(0, 0);
     display.println("[DISPLAY] Ready");
     display.display();
-
-    Serial.println("[DISPLAY] Ready");
   }
 
   void update(float temperature, int tempState, int signalQuality, String operatorName = "")
@@ -77,7 +73,6 @@ public:
       isOn = true;
       displayOnTime = millis();
       display.ssd1306_command(SSD1306_DISPLAYON);
-      Serial.println("[DISPLAY] Turned ON");
     }
   }
 
@@ -87,7 +82,6 @@ public:
     {
       isOn = false;
       display.ssd1306_command(SSD1306_DISPLAYOFF);
-      Serial.println("[DISPLAY] Turned OFF");
     }
   }
 

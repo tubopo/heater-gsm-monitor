@@ -24,16 +24,13 @@ public:
 
   void begin()
   {
-    Serial.println("[GSM] Initializing modem...");
     display.displayMessage("GSM: Init...");
 
     // Wait for modem to auto-power-on (most SIM800L modules auto-power when VCC applied)
-    Serial.println("[GSM] Waiting for auto-power-on...");
     display.displayMessage("GSM: Waiting boot\n(5 sec)");
     delay(5000); // Give modem time to boot up
 
     // Try autobaud detection - test multiple baud rates
-    Serial.println("[GSM] Auto-detecting baud rate...");
     display.displayMessage("GSM: Auto-detect\nbaud rate...");
 
     bool modemResponding = false;
@@ -43,9 +40,6 @@ public:
     for (int b = 0; b < numBaudRates && !modemResponding; b++)
     {
       unsigned long testBaud = baudRates[b];
-      Serial.print("[GSM] Trying ");
-      Serial.print(testBaud);
-      Serial.println(" baud...");
 
       String msg = "GSM: Testing\n" + String(testBaud) + " baud";
       display.displayMessage(msg.c_str());
@@ -59,10 +53,6 @@ public:
         modem.sendAT("");
         if (modem.waitResponse(1000) == 1)
         {
-          Serial.print("[GSM] SUCCESS at ");
-          Serial.print(testBaud);
-          Serial.println(" baud!");
-
           String successMsg = "GSM: Found!\n" + String(testBaud) + " baud";
           display.displayMessage(successMsg.c_str());
           delay(2000);
@@ -77,10 +67,6 @@ public:
     if (!modemResponding)
     {
       Serial.println("[GSM] ERROR: No baud rate worked!");
-      Serial.println("[GSM] Possible issues:");
-      Serial.println("[GSM]   1) RX/TX wires crossed");
-      Serial.println("[GSM]   2) No common GND");
-      Serial.println("[GSM]   3) Logic level mismatch");
       display.displayMessage("GSM: FAILED\nAll baud rates\ntried!");
       delay(5000);
       isConnected = false;
@@ -88,7 +74,6 @@ public:
     }
 
     // Initialize modem (this is important!)
-    Serial.println("[GSM] Initializing modem...");
     display.displayMessage("GSM: Modem init");
     if (!modem.init())
     {
@@ -103,8 +88,6 @@ public:
     String modemInfo = modem.getModemInfo();
     if (!modemInfo.isEmpty())
     {
-      Serial.print("[GSM] Info: ");
-      Serial.println(modemInfo);
       String msg = "GSM: " + modemInfo;
       display.displayMessage(msg.c_str());
       delay(2000);
@@ -115,12 +98,10 @@ public:
     modem.waitResponse();
 
     // Check SIM status
-    Serial.println("[GSM] Checking SIM status...");
     display.displayMessage("GSM: Check SIM");
     int simStatus = modem.getSimStatus();
     if (simStatus != SIM_READY)
     {
-      Serial.println("[GSM] Unlocking SIM...");
       display.displayMessage("GSM: Unlock SIM");
       if (!modem.simUnlock(SIM_PIN))
       {
@@ -132,23 +113,17 @@ public:
     }
 
     // Wait for network registration with detailed feedback
-    Serial.println("[GSM] Waiting for network registration...");
-    Serial.println("[GSM] This may take 30-60 seconds...");
     display.displayMessage("GSM: Wait network\n30-60 sec...");
 
     if (!modem.waitForNetwork(60000L))
     {
       Serial.println("[GSM] ERROR: Network registration failed!");
-      Serial.println("[GSM] Check: 1) SIM card inserted");
-      Serial.println("[GSM]        2) 2G/GSM coverage in your area");
-      Serial.println("[GSM]        3) SIM card activated");
       display.displayMessage("GSM: NO NETWORK\nCheck SIM/2G");
       delay(5000);
       isConnected = false;
       return;
     }
 
-    Serial.println("[GSM] Network registered successfully");
     display.displayMessage("GSM: Registered!");
     delay(1000);
     isConnected = true;
@@ -157,8 +132,6 @@ public:
     operatorName = modem.getOperator();
     if (operatorName.length() > 0)
     {
-      Serial.print("[GSM] Operator: ");
-      Serial.println(operatorName);
       String opMsg = "GSM: " + operatorName;
       display.displayMessage(opMsg.c_str());
       delay(2000);
@@ -177,7 +150,6 @@ public:
     if (signalQuality == 99)
     {
       Serial.println("[GSM] WARNING: No signal detected!");
-      Serial.println("[GSM] Try moving outdoors or check antenna");
       display.displayMessage("GSM: NO SIGNAL!\nCheck antenna");
       delay(3000);
     }
@@ -209,7 +181,6 @@ public:
       // stat=4 means incoming call (not yet answered)
       if (response.indexOf("+CLCC:") >= 0 && response.indexOf(",1,4,") >= 0)
       {
-        Serial.println("[GSM] Incoming call detected!");
         return true;
       }
     }
@@ -218,7 +189,6 @@ public:
 
   void hangupCall()
   {
-    Serial.println("[GSM] Hanging up call...");
     modem.sendAT(GF("ATH")); // ATH = Hang up command
     modem.waitResponse(1000);
     delay(500);
@@ -230,16 +200,12 @@ public:
   void checkSignal()
   {
     signalQuality = modem.getSignalQuality();
-    Serial.print("[GSM] Signal: ");
-    Serial.print(signalQuality);
-    Serial.println("/31");
   }
 
   bool sendAlert(float temperature, int tempState)
   {
     if (!isConnected)
     {
-      Serial.println("[SMS] Not connected to network");
       return false;
     }
 
@@ -258,23 +224,13 @@ public:
     message += temperature;
     message += "C";
 
-    if (modem.sendSMS(PHONE_NUMBER, message))
-    {
-      Serial.println("[SMS] Alert sent");
-      return true;
-    }
-    else
-    {
-      Serial.println("[SMS] Send failed");
-      return false;
-    }
+    return modem.sendSMS(PHONE_NUMBER, message);
   }
 
   bool sendStatusSMS(float temperature, int tempState)
   {
     if (!isConnected)
     {
-      Serial.println("[SMS] Not connected to network");
       return false;
     }
 
@@ -296,17 +252,7 @@ public:
     message += signalQuality;
     message += "/31";
 
-    Serial.println("[SMS] Sending status SMS...");
-    if (modem.sendSMS(PHONE_NUMBER, message))
-    {
-      Serial.println("[SMS] Status SMS sent");
-      return true;
-    }
-    else
-    {
-      Serial.println("[SMS] Status SMS failed");
-      return false;
-    }
+    return modem.sendSMS(PHONE_NUMBER, message);
   }
 
   int getSignalQuality() const { return signalQuality; }

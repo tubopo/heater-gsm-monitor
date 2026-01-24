@@ -18,9 +18,7 @@ public:
 
   void begin()
   {
-    Serial.println("[BUTTON] Initializing TTP223...");
     pinMode(buttonPin, INPUT);
-    Serial.println("[BUTTON] Ready");
   }
 
   void update()
@@ -60,7 +58,6 @@ public:
 private:
   void onPressed()
   {
-    Serial.println("[BUTTON] Pressed");
     if (onPressCallback)
     {
       onPressCallback();

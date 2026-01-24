@@ -20,13 +20,11 @@ public:
 
   void begin()
   {
-    Serial.println("[SENSOR] Initializing DS18B20...");
     sensor.begin();
 
     if (sensor.getDeviceCount() > 0)
     {
       sensor.setResolution(12);
-      Serial.println("[SENSOR] Ready");
     }
     else
     {
@@ -59,7 +57,6 @@ private:
 
     if (currentTemp == DEVICE_DISCONNECTED_C)
     {
-      Serial.println("[TEMP] ERROR: Sensor disconnected");
       currentState = TEMP_STATE_CRITICAL;
       return;
     }
@@ -78,18 +75,6 @@ private:
     {
       currentState = TEMP_STATE_NORMAL;
     }
-
-    // Debug output
-    Serial.print("[TEMP] ");
-    Serial.print(currentTemp, 1);
-    Serial.print("C ");
-
-    if (currentState == TEMP_STATE_CRITICAL)
-      Serial.println("(CRITICAL)");
-    else if (currentState == TEMP_STATE_WARNING)
-      Serial.println("(WARNING)");
-    else
-      Serial.println("(NORMAL)");
   }
 };
 
