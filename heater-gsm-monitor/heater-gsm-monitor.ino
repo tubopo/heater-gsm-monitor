@@ -61,8 +61,6 @@ void loop()
 
   if (callDetected && !callBeingHandled)
   {
-    // Mark that we're handling this call to prevent multiple SMS
-    callBeingHandled = true;
     display.displayMessage("CALL!\nSending status...");
 
     // Hang up the call
@@ -71,6 +69,8 @@ void loop()
 
     // Send status SMS with current temperature and state
     gsm.sendStatusSMS(tempSensor.getTemperature(), tempSensor.getState());
+    // Mark that we're handling this call to prevent multiple SMS
+    callBeingHandled = true;
 
     // Flash LED to indicate call was handled
     for (int i = 0; i < 3; i++)
