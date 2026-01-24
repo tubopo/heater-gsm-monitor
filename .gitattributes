@@ -1,0 +1,59 @@
+# Arduino Project Git Attributes
+# TTGO T-Call V1.4 GSM Temperature Monitor
+
+# ============================================
+# Line Endings
+# ============================================
+# Ensure consistent line endings across platforms
+* text=auto
+
+# Source code files (use LF on all platforms)
+*.ino text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.c text eol=lf
+
+# Configuration files
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+Makefile text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Documentation
+*.md text eol=lf
+README text eol=lf
+LICENSE text eol=lf
+
+# ============================================
+# Binary Files (do not merge)
+# ============================================
+*.bin binary
+*.elf binary
+*.o binary
+*.a binary
+*.so binary
+
+# Build artifacts
+build/** binary
+*.pdf binary
+
+# ============================================
+# Arduino Specific
+# ============================================
+# Arduino CLI cache and artifacts
+.arduino15/** binary
+Arduino15/** binary
+
+# VS Code settings
+.vscode/** export-ignore
+
+# ============================================
+# Ignore for export
+# ============================================
+build/ export-ignore
+.github/ export-ignore
+SKU-*.pdf export-ignore
+*.md export-ignore
