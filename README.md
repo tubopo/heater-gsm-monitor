@@ -2,7 +2,7 @@
 
 > Smart temperature monitoring with SMS alerts using ESP8266 and SIM800L
 
-[![Build Status](https://github.com/tubopo/heater-gsm-monitor/workflows/Build%20Verification/badge.svg)](https://github.com/tubopo/heater-gsm-monitor/actions)
+[![🚦 Build Verification](https://github.com/tubopo/heater-gsm-monitor/actions/workflows/verify.yml/badge.svg)](https://github.com/tubopo/heater-gsm-monitor/actions/workflows/verify.yml)
 [![Platform](https://img.shields.io/badge/platform-ESP8266-blue.svg)](https://arduino-esp8266.readthedocs.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
