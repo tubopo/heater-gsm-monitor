@@ -235,7 +235,7 @@ public:
     }
 
     // Build status message
-    String message = "Heater Status:\n";
+    String message = "Heater:\n";
     message += "Temp: ";
     message += temperature;
     message += "C\n";
