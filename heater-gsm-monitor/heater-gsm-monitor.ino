@@ -20,6 +20,7 @@ ButtonModule button;
 // State tracking
 unsigned long lastAlertTime = 0;
 int lastAlertState = -1;
+int alertCount = 0; // Track number of alerts sent for current problem
 bool callBeingHandled = false;
 
 void setup()
@@ -99,22 +100,30 @@ void loop()
     {
       unsigned long timeSinceLastAlert = millis() - lastAlertTime;
 
-      // Respect cooldown period
-      if (timeSinceLastAlert >= ALERT_COOLDOWN || lastAlertState == -1)
+      // Check if we haven't exceeded max alerts and cooldown has passed
+      if (alertCount < MAX_ALERTS_PER_EVENT && (timeSinceLastAlert >= ALERT_COOLDOWN || lastAlertState == -1))
       {
         gsm.sendAlert(tempSensor.getTemperature(), currentState);
         lastAlertTime = millis();
         lastAlertState = currentState;
+        alertCount++;
 
         // Flash LED on alert
         digitalWrite(STATUS_LED_PIN, HIGH);
         delay(200);
         digitalWrite(STATUS_LED_PIN, LOW);
       }
+      else
+      {
+        // Just update state tracking without sending alert
+        lastAlertState = currentState;
+      }
     }
     else
     {
+      // Temperature returned to normal - reset counters
       lastAlertState = TEMP_STATE_NORMAL;
+      alertCount = 0;
     }
   }
 

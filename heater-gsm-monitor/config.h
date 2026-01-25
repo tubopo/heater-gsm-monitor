@@ -63,6 +63,7 @@
 #define DISPLAY_UPDATE_INTERVAL 2000 // Update display every 2 seconds
 #define GSM_CHECK_INTERVAL 60000     // Check GSM signal every 60 seconds
 #define ALERT_COOLDOWN 180000        // Alert cooldown (avoid spam) - 3 minutes
+#define MAX_ALERTS_PER_EVENT 3       // Maximum alerts per problem event before returning to normal
 
 // ============================================
 // Temperature Thresholds (Celsius)

@@ -57,6 +57,7 @@ private:
 
     if (currentTemp == DEVICE_DISCONNECTED_C)
     {
+      lastState = currentState;
       currentState = TEMP_STATE_CRITICAL;
       return;
     }
