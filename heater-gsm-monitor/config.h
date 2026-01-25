@@ -88,10 +88,4 @@
 #define ALERT_ON_CRITICAL 1 // Send SMS on critical temperatures (1=yes, 0=no)
 #define ALERT_ON_WARNING 1  // Send SMS on warning temperatures (1=yes, 0=no)
 
-// ============================================
-// System Debug
-// ============================================
-#define DEBUG_SERIAL 1 // Enable debug output (1=yes, 0=no)
-#define DEBUG_GSM 1    // Debug GSM module (1=yes, 0=no)
-
 #endif // CONFIG_H
