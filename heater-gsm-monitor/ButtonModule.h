@@ -18,7 +18,7 @@ public:
 
   void begin()
   {
-    pinMode(buttonPin, INPUT);
+    pinMode(buttonPin, INPUT_PULLUP);
   }
 
   void update()
