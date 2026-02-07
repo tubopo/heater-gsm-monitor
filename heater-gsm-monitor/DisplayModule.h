@@ -127,22 +127,34 @@ private:
 
     // Yellow section (top 16 pixels): Temperature + Status
     display.setCursor(0, 4);
-    display.print("TEMP:");
-    display.setTextSize(2);
-    display.setCursor(40, 0);
-    display.print(temperature, 1);
-    display.setTextSize(1);
-    display.setCursor(95, 4);
-    display.print("C");
 
-    // Status indicator in yellow section
-    display.setCursor(105, 4);
-    if (tempState == TEMP_STATE_CRITICAL)
-      display.print("!");
-    else if (tempState == TEMP_STATE_WARNING)
-      display.print("*");
+    if (tempState == TEMP_STATE_DISCONNECTED)
+    {
+      // Show error message instead of temperature
+      display.setTextSize(1);
+      display.print("SENSOR");
+      display.setCursor(0, 12);
+      display.print("DISCONNECTED!");
+    }
     else
-      display.print("");
+    {
+      display.print("TEMP:");
+      display.setTextSize(2);
+      display.setCursor(40, 0);
+      display.print(temperature, 1);
+      display.setTextSize(1);
+      display.setCursor(95, 4);
+      display.print("C");
+
+      // Status indicator in yellow section
+      display.setCursor(105, 4);
+      if (tempState == TEMP_STATE_CRITICAL)
+        display.print("!");
+      else if (tempState == TEMP_STATE_WARNING)
+        display.print("*");
+      else
+        display.print("");
+    }
 
     // Blue section starts at Y=16
     // Draw separator line
@@ -170,7 +182,9 @@ private:
 
     // Status text
     display.setCursor(0, 52);
-    if (tempState == TEMP_STATE_CRITICAL)
+    if (tempState == TEMP_STATE_DISCONNECTED)
+      display.print("STATUS: ERROR!");
+    else if (tempState == TEMP_STATE_CRITICAL)
       display.print("STATUS: CRITICAL!");
     else if (tempState == TEMP_STATE_WARNING)
       display.print("STATUS: WARNING");

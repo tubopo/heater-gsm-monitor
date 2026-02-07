@@ -59,7 +59,7 @@
 // ============================================
 // Timing Configuration (milliseconds)
 // ============================================
-#define SENSOR_READ_INTERVAL 10000   // Read sensor every 10 seconds
+#define SENSOR_READ_INTERVAL 1800000 // Read sensor every 30 minutes (reduces wear)
 #define DISPLAY_UPDATE_INTERVAL 2000 // Update display every 2 seconds
 #define GSM_CHECK_INTERVAL 60000     // Check GSM signal every 60 seconds
 #define ALERT_COOLDOWN 180000        // Alert cooldown (avoid spam) - 3 minutes
@@ -77,6 +77,12 @@
 #define TEMP_STATE_NORMAL 0
 #define TEMP_STATE_WARNING 1
 #define TEMP_STATE_CRITICAL 2
+#define TEMP_STATE_DISCONNECTED 3
+
+// Sensor validation
+#define TEMP_VALID_MIN -55.0  // DS18B20 minimum valid reading
+#define TEMP_VALID_MAX 125.0  // DS18B20 maximum valid reading
+#define SENSOR_RETRY_INTERVAL 30000  // Retry sensor init every 30 seconds on disconnect
 
 // ============================================
 // SMS Configuration (using arduino_secrets.h)

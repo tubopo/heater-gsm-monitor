@@ -41,8 +41,9 @@ public:
     {
       unsigned long testBaud = baudRates[b];
 
-      String msg = "GSM: Testing\n" + String(testBaud) + " baud";
-      display.displayMessage(msg.c_str());
+      char msg[32];
+      snprintf(msg, sizeof(msg), "GSM: Testing\n%lu baud", testBaud);
+      display.displayMessage(msg);
 
       gsmSerial.begin(testBaud);
       delay(100);
@@ -53,8 +54,8 @@ public:
         modem.sendAT("");
         if (modem.waitResponse(1000) == 1)
         {
-          String successMsg = "GSM: Found!\n" + String(testBaud) + " baud";
-          display.displayMessage(successMsg.c_str());
+          snprintf(msg, sizeof(msg), "GSM: Found!\n%lu baud", testBaud);
+          display.displayMessage(msg);
           delay(2000);
 
           modemResponding = true;
@@ -66,8 +67,7 @@ public:
 
     if (!modemResponding)
     {
-      Serial.println("[GSM] ERROR: No baud rate worked!");
-      display.displayMessage("GSM: FAILED\nAll baud rates\ntried!");
+      display.displayMessage("GSM: FAILED\nNo response!");
       delay(5000);
       isConnected = false;
       return;
@@ -77,7 +77,6 @@ public:
     display.displayMessage("GSM: Modem init");
     if (!modem.init())
     {
-      Serial.println("[GSM] ERROR: Modem init failed!");
       display.displayMessage("GSM: Init FAILED");
       delay(3000);
       isConnected = false;
@@ -88,8 +87,9 @@ public:
     String modemInfo = modem.getModemInfo();
     if (!modemInfo.isEmpty())
     {
-      String msg = "GSM: " + modemInfo;
-      display.displayMessage(msg.c_str());
+      char msg[48];
+      snprintf(msg, sizeof(msg), "GSM: %.32s", modemInfo.c_str());
+      display.displayMessage(msg);
       delay(2000);
     }
 
@@ -105,7 +105,6 @@ public:
       display.displayMessage("GSM: Unlock SIM");
       if (!modem.simUnlock(SIM_PIN))
       {
-        Serial.println("[GSM] ERROR: SIM unlock failed!");
         display.displayMessage("GSM: SIM UNLOCK\nFAILED!");
         delay(3000);
       }
@@ -117,8 +116,7 @@ public:
 
     if (!modem.waitForNetwork(60000L))
     {
-      Serial.println("[GSM] ERROR: Network registration failed!");
-      display.displayMessage("GSM: NO NETWORK\nCheck SIM/2G");
+      display.displayMessage("GSM: NO NETWORK\nCheck SIM/antenna");
       delay(5000);
       isConnected = false;
       return;
@@ -132,8 +130,9 @@ public:
     operatorName = modem.getOperator();
     if (operatorName.length() > 0)
     {
-      String opMsg = "GSM: " + operatorName;
-      display.displayMessage(opMsg.c_str());
+      char opMsg[32];
+      snprintf(opMsg, sizeof(opMsg), "GSM: %.20s", operatorName.c_str());
+      display.displayMessage(opMsg);
       delay(2000);
     }
 
@@ -141,15 +140,13 @@ public:
     checkSignal();
 
     // Show signal on display
-    String signalMsg = "GSM: Signal ";
-    signalMsg += signalQuality;
-    signalMsg += "/31";
-    display.displayMessage(signalMsg.c_str());
+    char signalMsg[32];
+    snprintf(signalMsg, sizeof(signalMsg), "GSM: Signal %d/31", signalQuality);
+    display.displayMessage(signalMsg);
     delay(2000);
 
     if (signalQuality == 99)
     {
-      Serial.println("[GSM] WARNING: No signal detected!");
       display.displayMessage("GSM: NO SIGNAL!\nCheck antenna");
       delay(3000);
     }
@@ -209,20 +206,23 @@ public:
       return false;
     }
 
-    String message = "ALERT: ";
+    // Use char buffer to avoid String memory fragmentation
+    char message[80];
 
-    if (tempState == TEMP_STATE_CRITICAL)
+    if (tempState == TEMP_STATE_DISCONNECTED)
     {
-      message += (temperature <= TEMP_CRITICAL_LOW) ? "CRITICAL LOW" : "CRITICAL HIGH";
+      snprintf(message, sizeof(message), "ALERT: SENSOR DISCONNECTED");
+    }
+    else if (tempState == TEMP_STATE_CRITICAL)
+    {
+      const char* alertType = (temperature <= TEMP_CRITICAL_LOW) ? "CRITICAL LOW" : "CRITICAL HIGH";
+      snprintf(message, sizeof(message), "ALERT: %s %.1fC", alertType, temperature);
     }
     else
     {
-      message += (temperature < TEMP_MIN) ? "WARNING LOW" : "WARNING HIGH";
+      const char* alertType = (temperature < TEMP_MIN) ? "WARNING LOW" : "WARNING HIGH";
+      snprintf(message, sizeof(message), "ALERT: %s %.1fC", alertType, temperature);
     }
-
-    message += " ";
-    message += temperature;
-    message += "C";
 
     return modem.sendSMS(PHONE_NUMBER, message);
   }
@@ -234,22 +234,27 @@ public:
       return false;
     }
 
-    // Build status message
-    String message = "Temp: ";
-    message += temperature;
-    message += "C\n";
+    // Use char buffer to avoid String memory fragmentation
+    char message[100];
+    const char* statusText;
 
-    message += "Status: ";
-    if (tempState == TEMP_STATE_CRITICAL)
-      message += "CRITICAL";
+    if (tempState == TEMP_STATE_DISCONNECTED)
+      statusText = "DISCONNECTED";
+    else if (tempState == TEMP_STATE_CRITICAL)
+      statusText = "CRITICAL";
     else if (tempState == TEMP_STATE_WARNING)
-      message += "WARNING";
+      statusText = "WARNING";
     else
-      message += "NORMAL";
+      statusText = "NORMAL";
 
-    message += "\nSignal: ";
-    message += signalQuality;
-    message += "/31";
+    if (tempState == TEMP_STATE_DISCONNECTED)
+    {
+      snprintf(message, sizeof(message), "Temp: SENSOR ERROR\nStatus: %s\nSignal: %d/31", statusText, signalQuality);
+    }
+    else
+    {
+      snprintf(message, sizeof(message), "Temp: %.1fC\nStatus: %s\nSignal: %d/31", temperature, statusText, signalQuality);
+    }
 
     return modem.sendSMS(PHONE_NUMBER, message);
   }

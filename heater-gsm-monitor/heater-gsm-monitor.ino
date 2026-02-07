@@ -62,15 +62,17 @@ void loop()
 
   if (callDetected && !callBeingHandled)
   {
+    // Get fresh temperature if needed (skips if reading is < 5 minutes old)
+    tempSensor.forceRead();
+
     display.displayMessage("CALL!\nSending status...");
 
     // Hang up the call
     gsm.hangupCall();
-    delay(1000); // Wait for hangup to complete
+    delay(500); // Wait for hangup to complete
 
     // Send status SMS with current temperature and state
     gsm.sendStatusSMS(tempSensor.getTemperature(), tempSensor.getState());
-    // Mark that we're handling this call to prevent multiple SMS
     callBeingHandled = true;
 
     // Flash LED to indicate call was handled
@@ -82,7 +84,7 @@ void loop()
       delay(100);
     }
 
-    delay(2000); // Show message for 2 seconds
+    delay(1500); // Show message briefly
   }
   else if (!callDetected && callBeingHandled)
   {
@@ -100,8 +102,39 @@ void loop()
     {
       unsigned long timeSinceLastAlert = millis() - lastAlertTime;
 
-      // Check if we haven't exceeded max alerts and cooldown has passed
-      if (alertCount < MAX_ALERTS_PER_EVENT && (timeSinceLastAlert >= ALERT_COOLDOWN || lastAlertState == -1))
+      // Handle millis() overflow
+      if (millis() < lastAlertTime)
+      {
+        lastAlertTime = millis();
+        timeSinceLastAlert = ALERT_COOLDOWN;
+      }
+
+      // DISCONNECTED state: send one alert, then wait for recovery
+      if (currentState == TEMP_STATE_DISCONNECTED)
+      {
+        // Only send alert on first disconnection detection
+        if (lastAlertState != TEMP_STATE_DISCONNECTED && (timeSinceLastAlert >= ALERT_COOLDOWN || lastAlertState == -1))
+        {
+          gsm.sendAlert(tempSensor.getTemperature(), currentState);
+          lastAlertTime = millis();
+          lastAlertState = currentState;
+
+          // Flash LED rapidly for sensor error
+          for (int i = 0; i < 5; i++)
+          {
+            digitalWrite(STATUS_LED_PIN, HIGH);
+            delay(100);
+            digitalWrite(STATUS_LED_PIN, LOW);
+            delay(100);
+          }
+        }
+        else
+        {
+          lastAlertState = currentState;
+        }
+      }
+      // WARNING/CRITICAL states: normal alert logic with max count
+      else if (alertCount < MAX_ALERTS_PER_EVENT && (timeSinceLastAlert >= ALERT_COOLDOWN || lastAlertState == -1))
       {
         gsm.sendAlert(tempSensor.getTemperature(), currentState);
         lastAlertTime = millis();
@@ -121,7 +154,7 @@ void loop()
     }
     else
     {
-      // Temperature returned to normal - reset counters
+      // Temperature/sensor returned to normal - reset counters
       lastAlertState = TEMP_STATE_NORMAL;
       alertCount = 0;
     }
