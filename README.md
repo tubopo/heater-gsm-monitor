@@ -77,6 +77,7 @@ esphome/
   fonts/                         Vendored Roboto Mono (SIL OFL)
   secrets.yaml.example           Secrets template
   requirements.txt               Pinned ESPHome version
+site/                            Project page, published with GitHub Pages
 Makefile                         Build, upload and log targets
 ```
 

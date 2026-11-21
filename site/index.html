@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heater GSM Monitor — a text message when the heating stops</title>
+<meta name="description" content="A small open-source device that watches one temperature and sends an SMS when it leaves the safe range. No WiFi, no app, no subscription — just a SIM card.">
+<meta property="og:title" content="Heater GSM Monitor">
+<meta property="og:description" content="A text message when the heating stops. Open-source, built with ESPHome on an ESP8266 and a SIM800L.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16150f" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316150f'/%3E%3Cpath d='M16 6a3 3 0 0 0-3 3v9.3a5 5 0 1 0 6 0V9a3 3 0 0 0-3-3z' fill='%23f59e42'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f7f4ee;
+    --surface: #fffdf9;
+    --text: #1f1d1a;
+    --muted: #686259;
+    --line: #e3ddd1;
+    --accent: #b8470f;
+    --accent-text: #fff;
+    --bubble: #ebe6da;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16150f;
+      --surface: #1f1d17;
+      --text: #ece8df;
+      --muted: #a69f92;
+      --line: #35322a;
+      --accent: #f59e42;
+      --accent-text: #1b1307;
+      --bubble: #2c2a22;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); }
+  h1, h2, h3 { line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+  h1 { font-size: clamp(2rem, 5.2vw, 3.1rem); font-weight: 700; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.8rem); font-weight: 650; }
+  h3 { font-size: 1.05rem; font-weight: 650; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 22px 0; }
+  header .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .brand { font-weight: 650; text-decoration: none; color: var(--text); }
+  header nav a { color: var(--muted); text-decoration: none; margin-left: 22px; font-size: 0.95rem; }
+  header nav a:hover { color: var(--text); }
+
+  .hero { padding: 40px 0 72px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 56px; align-items: center; }
+  .hero p.lead { margin-top: 20px; font-size: 1.15rem; color: var(--muted); max-width: 34em; }
+  .actions { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-block; padding: 11px 20px; border-radius: 10px;
+    text-decoration: none; font-weight: 600; font-size: 0.98rem;
+    border: 1px solid var(--line); color: var(--text); background: var(--surface);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+  /* The two things you actually look at: the display and your phone. */
+  .demo { display: grid; gap: 18px; justify-items: center; }
+  .oled {
+    width: 100%; max-width: 330px; padding: 14px 14px 12px;
+    background: #0b0b0d; border-radius: 14px; border: 1px solid #2a2a2e;
+    box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.55);
+  }
+  .oled svg { display: block; width: 100%; height: auto; }
+  .oled text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .thread {
+    width: 100%; max-width: 330px; padding: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .thread .who { font-size: 0.8rem; color: var(--muted); text-align: center; margin-bottom: 10px; }
+  .msg { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .msg span.b { background: var(--bubble); padding: 7px 12px; border-radius: 14px 14px 14px 4px; font-size: 0.92rem; }
+  .msg time, .note { font-size: 0.75rem; color: var(--muted); }
+  .note { text-align: center; margin-top: 12px; }
+
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  section > .wrap > p.intro { margin-top: 12px; color: var(--muted); max-width: 40em; }
+  .grid { display: grid; gap: 18px; margin-top: 32px; }
+  .grid.three { grid-template-columns: repeat(3, 1fr); }
+  .grid.two { grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .card p { margin-top: 8px; color: var(--muted); font-size: 0.97rem; }
+  .step { font-size: 0.8rem; color: var(--accent); font-weight: 650; letter-spacing: 0.04em; margin-bottom: 8px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 0.97rem; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+  td.status { white-space: nowrap; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; }
+
+  ul.plain { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; }
+  ul.plain li { padding-left: 22px; position: relative; color: var(--muted); }
+  ul.plain li::before { content: ""; position: absolute; left: 2px; top: 0.72em; width: 8px; height: 2px; background: var(--accent); }
+  ul.plain li strong { color: var(--text); font-weight: 600; }
+
+  .cta { text-align: center; }
+  .cta p { margin: 12px auto 0; color: var(--muted); max-width: 34em; }
+  .cta .actions { justify-content: center; }
+  footer { padding: 28px 0 44px; color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--line); }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+  @media (max-width: 800px) {
+    .hero { padding: 16px 0 56px; }
+    .hero .wrap { grid-template-columns: 1fr; gap: 40px; }
+    .grid.three, .grid.two { grid-template-columns: 1fr; }
+    header nav a:not(.keep) { display: none; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="#top">Heater GSM Monitor</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#parts">Parts</a>
+      <a href="#caveats">Before you build</a>
+      <a class="keep" href="https://github.com/tubopo/heater-gsm-monitor">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <h1>A text message when the heating stops.</h1>
+        <p class="lead">
+          Heater GSM Monitor is a small open-source device for places you can't check on every
+          day: a summer house, a workshop, a pump room. It watches one temperature and texts you
+          when it leaves the safe range. No WiFi, no app, no subscription. Just a SIM card.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/tubopo/heater-gsm-monitor">View on GitHub</a>
+          <a class="btn" href="#how">How it works</a>
+        </div>
+      </div>
+
+      <div class="demo" aria-hidden="true">
+        <div class="oled">
+          <svg viewBox="0 0 256 128" role="img">
+            <g fill="#ffd84a">
+              <text x="0" y="30" font-size="18" textLength="60" lengthAdjust="spacingAndGlyphs">TEMP:</text>
+              <text x="80" y="30" font-size="36" textLength="108" lengthAdjust="spacingAndGlyphs">21.5C</text>
+            </g>
+            <g fill="#63d2ff">
+              <rect x="0" y="33" width="256" height="2"/>
+              <text x="0" y="57" font-size="18" textLength="84" lengthAdjust="spacingAndGlyphs">GSM: OK</text>
+              <text x="0" y="79" font-size="18" textLength="156" lengthAdjust="spacingAndGlyphs">SIGNAL: 18/31</text>
+              <rect x="1" y="85" width="254" height="14" fill="none" stroke="#63d2ff" stroke-width="2"/>
+              <rect x="3" y="87" width="146" height="10"/>
+              <text x="0" y="124" font-size="18" textLength="168" lengthAdjust="spacingAndGlyphs">STATUS: NORMAL</text>
+            </g>
+          </svg>
+        </div>
+        <div class="thread">
+          <div class="who">Heater</div>
+          <div class="msg"><span class="b mono">9.4C WARNING</span><time>02:47</time></div>
+          <div class="msg"><span class="b mono">4.8C CRITICAL</span><time>05:12</time></div>
+          <div class="note">You called · 08:30</div>
+          <div class="msg"><span class="b mono">21.5C NORMAL</span><time>08:30</time></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p class="intro">Three things, and nothing else.</p>
+      <div class="grid three">
+        <div class="card">
+          <div class="step">1 · MEASURE</div>
+          <h3>Reads the temperature every five minutes</h3>
+          <p>A single bad reading is ignored. Three in a row are reported as a disconnected
+             sensor, and a probe you plug back in is picked up on its own.</p>
+        </div>
+        <div class="card">
+          <div class="step">2 · ALERT</div>
+          <h3>Texts you when something changes</h3>
+          <p>When the temperature leaves the normal range you get one SMS with the reading and
+             the status. Another follows only if the situation changes.</p>
+        </div>
+        <div class="card">
+          <div class="step">3 · ASK</div>
+          <h3>Answers a call with a text</h3>
+          <p>Call its number whenever you want to know. It hangs up without answering and
+             replies with the current temperature by SMS.</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Default range</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="status"><span class="dot" style="background:#3f9d5b"></span>NORMAL</td><td>10 – 45 °C</td></tr>
+          <tr><td class="status"><span class="dot" style="background:#d9a300"></span>WARNING</td><td>5 – 10 °C or 45 – 55 °C</td></tr>
+          <tr><td class="status"><span class="dot" style="background:#d1442e"></span>CRITICAL</td><td>5 °C and below, 55 °C and above</td></tr>
+          <tr><td class="status"><span class="dot" style="background:#8a857b"></span>DISCONNECTED</td><td>Probe missing or unreadable</td></tr>
+        </tbody>
+      </table>
+      <p class="muted" style="margin-top:14px;font-size:0.92rem">Entering WARNING, CRITICAL or
+        DISCONNECTED sends one SMS; returning to NORMAL sends none. All four thresholds are settings.</p>
+    </div>
+  </section>
+
+  <section id="design">
+    <div class="wrap">
+      <h2>Built to be left alone</h2>
+      <p class="intro">Most of the work went into what happens when things go wrong at 3 a.m. and nobody is there.</p>
+      <div class="grid two">
+        <div class="card">
+          <h3>A fixed SMS budget</h3>
+          <p>At most three alerts an hour and ten a day, at least three minutes apart. A flapping
+             sensor can't drain the SIM, and the daily count survives a power cut.</p>
+        </div>
+        <div class="card">
+          <h3>Late, not lost</h3>
+          <p>An alert that can't go out yet, because there is no signal or the budget is used
+             up, waits and is sent when it can be, with the reading at that moment.</p>
+        </div>
+        <div class="card">
+          <h3>No WiFi required</h3>
+          <p>The everyday firmware has no WiFi, no cloud account and no remote update. It needs
+             mobile coverage and power, nothing else.</p>
+        </div>
+        <div class="card">
+          <h3>Thresholds with a margin</h3>
+          <p>A warning that starts below 10 °C clears at 11 °C. A temperature hovering at a
+             threshold gives you one message instead of ten.</p>
+        </div>
+        <div class="card">
+          <h3>A screen that stays dark</h3>
+          <p>The display is off until you touch the button, then shows temperature, signal and
+             status for thirty seconds.</p>
+        </div>
+        <div class="card">
+          <h3>A service mode when you need it</h3>
+          <p>A separate debug firmware opens its own hotspot with a status page, live logs and
+             a test-SMS button, for the day you are standing next to it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="parts">
+    <div class="wrap">
+      <h2>What it is made of</h2>
+      <p class="intro">Common hobby parts and a few YAML files. The firmware is built with
+        <a href="https://esphome.io/">ESPHome</a>.</p>
+      <ul class="plain">
+        <li><strong>ESP8266 NodeMCU</strong> — the controller</li>
+        <li><strong>SIM800L</strong> — the GSM modem that sends and receives</li>
+        <li><strong>DS18B20</strong> — the temperature probe</li>
+        <li><strong>SSD1306 OLED, 128×64</strong> — the status screen</li>
+        <li><strong>TTP223</strong> — the touch button that wakes the screen</li>
+        <li><strong>LM2596 step-down and a 2200 µF capacitor</strong> — steady power for the modem</li>
+        <li><strong>A SIM card</strong> — with SMS, and its PIN switched off</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="caveats">
+    <div class="wrap">
+      <h2>Worth knowing before you build one</h2>
+      <ul class="plain">
+        <li><strong>It is a DIY project.</strong> You solder it, flash it over USB and edit a configuration file.</li>
+        <li><strong>The SIM800L is a 2G modem.</strong> Check that 2G still works where the device will live.</li>
+        <li><strong>Messages cost what your operator charges.</strong> The SMS budget is there partly for that reason.</li>
+        <li><strong>It is not a certified alarm.</strong> Treat it as an extra pair of eyes, not the only protection for something that matters.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <h2>Wiring, configuration and build steps</h2>
+      <p>Everything needed to build one is in the repository, under the MIT license.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/tubopo/heater-gsm-monitor#readme">Read the build guide</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Heater GSM Monitor · MIT license</span>
+    <span>Built with <a href="https://esphome.io/">ESPHome</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
