@@ -1,5 +1,4 @@
-# Arduino Project Git Attributes
-# TTGO T-Call V1.4 GSM Temperature Monitor
+# Heater GSM Monitor Git Attributes
 
 # ============================================
 # Line Endings
@@ -8,7 +7,6 @@
 * text=auto
 
 # Source code files (use LF on all platforms)
-*.ino text eol=lf
 *.h text eol=lf
 *.cpp text eol=lf
 *.c text eol=lf
@@ -39,13 +37,6 @@ LICENSE text eol=lf
 # Build artifacts
 build/** binary
 *.pdf binary
-
-# ============================================
-# Arduino Specific
-# ============================================
-# Arduino CLI cache and artifacts
-.arduino15/** binary
-Arduino15/** binary
 
 # VS Code settings
 .vscode/** export-ignore

@@ -4,51 +4,45 @@ on:
   push:
 
 jobs:
-  verify-build:
-    name: Verify Arduino Build
+  esphome:
+    name: Verify ESPHome Build
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Arduino CLI
-        uses: arduino/setup-arduino-cli@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Add ESP8266 Board Manager URL
-        run: arduino-cli config init --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+      - name: Install ESPHome
+        run: pip install -r esphome/requirements.txt
 
-      - name: Update Index with ESP8266 Package
-        run: arduino-cli core update-index
+      - name: Set ESPHome test secrets
+        run: cp esphome/secrets.yaml.example esphome/secrets.yaml
 
-      - name: Install ESP8266 Board Support
-        run: arduino-cli core install esp8266:esp8266
+      - name: Validate production config
+        working-directory: esphome
+        run: esphome config heater-gsm-monitor.yaml
 
-      - name: Install Required Libraries
-        run: |
-          arduino-cli lib install "TinyGSM@0.12.0"
-          arduino-cli lib install "DallasTemperature@4.0.5"
-          arduino-cli lib install "OneWire@2.3.8"
-          arduino-cli lib install "Adafruit GFX Library"
-          arduino-cli lib install "Adafruit SSD1306"
+      - name: Compile production firmware
+        working-directory: esphome
+        run: esphome compile heater-gsm-monitor.yaml
 
-      - name: Set arduino test secrets
-        working-directory: heater-gsm-monitor
-        run: |
-          echo '#define SECRET_PHONE_NUMBER "+1234567890"' > arduino_secrets.h
-          echo '#define SECRET_SIM_PIN "1234"' >> arduino_secrets.h
+      - name: Compile debug firmware
+        working-directory: esphome
+        run: esphome compile heater-gsm-monitor.debug.yaml
 
-      - name: Compile Sketch
-        run: |
-          arduino-cli compile \
-            --fqbn esp8266:esp8266:nodemcuv2 \
-            --output-dir build \
-            heater-gsm-monitor
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esphome-firmware
+          path: esphome/.esphome/build/*/.pioenvs/*/firmware.bin
 
       - name: Print Build Summary
         if: success()
         run: |
-          echo "✅ Build Successful!"
-          echo ""
-          echo "Build artifacts:"
-          ls -lh build/ | tail -n +2
+          echo "✅ ESPHome builds successful"
+          find esphome/.esphome/build -name firmware.bin -exec ls -lh {} \;

@@ -1,0 +1,61 @@
+substitutions:
+  device_name: heater-gsm-monitor-debug
+  display_boot_on: "true"
+
+packages:
+  common: !include packages/common.yaml
+
+# Debug-only access point. There is deliberately no station (router) config:
+# the device always starts its own hotspot and never depends on a network.
+wifi:
+  ap:
+    ssid: !secret ap_ssid
+    password: !secret ap_password
+  reboot_timeout: 0s
+
+# Firmware updates over the hotspot (make esphome-debug-ota), so the board
+# only needs a USB cable for the very first debug flash.
+ota:
+  - platform: esphome
+    password: !secret ap_password
+
+# Web UI + live logs at http://192.168.4.1/. `local: true` embeds the whole UI
+# in the firmware, so it works on the isolated access point with no internet.
+web_server:
+  port: 80
+  version: 2
+  local: true
+  include_internal: true
+
+sensor:
+  - platform: template
+    name: "Heap Free"
+    unit_of_measurement: "B"
+    update_interval: 30s
+    lambda: 'return ESP.getFreeHeap();'
+  - platform: template
+    name: "Heap Fragmentation"
+    unit_of_measurement: "%"
+    update_interval: 30s
+    lambda: 'return ESP.getHeapFragmentation();'
+  - platform: uptime
+    name: "Uptime"
+
+text_sensor:
+  - platform: template
+    name: "State"
+    update_interval: 5s
+    lambda: 'return std::string(STATE_NAMES[id(state)]);'
+  # Result of the baud scan.
+  - platform: template
+    name: "Modem"
+    update_interval: 5s
+    lambda: |-
+      if (id(modem_stage) == 0) return std::string("NO REPLY");
+      return std::to_string(id(modem_uart).get_baud_rate()) + " baud";
+
+button:
+  - platform: template
+    name: "Send Test SMS"
+    on_press:
+      - script.execute: send_sms

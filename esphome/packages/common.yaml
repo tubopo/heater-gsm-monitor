@@ -1,0 +1,428 @@
+# Shared ESPHome configuration for the heater GSM monitor.
+#
+# Entry points:
+#   heater-gsm-monitor.yaml        production, headless (no WiFi)
+#   heater-gsm-monitor.debug.yaml  bench/field diagnostics (AP hotspot + web UI)
+#
+# The SIM card must have its PIN disabled. ESPHome's sim800l component cannot
+# unlock a PIN-protected SIM.
+
+substitutions:
+  # SMS budget for automatic alerts. Call-status replies are not capped.
+  alert_cooldown_s: "180"
+  alert_hour_max: "3"
+  alert_day_max: "10"
+
+  # Temperature thresholds in Celsius.
+  temp_min: "10.0"
+  temp_max: "45.0"
+  temp_critical_low: "5.0"
+  temp_critical_high: "55.0"
+  # How far back inside a threshold the temperature must come before the state
+  # improves. Keeps a reading that hovers at a threshold from flapping between
+  # states and burning the SMS budget. "0.0" disables it.
+  temp_hysteresis: "1.0"
+
+  # Display.
+  display_timeout_s: "30"
+
+esphome:
+  name: ${device_name}
+  includes:
+    - state_names.h
+  on_boot:
+    - priority: -100
+      then:
+        - output.turn_on: status_led
+        - if:
+            condition:
+              lambda: 'return ${display_boot_on};'
+            then:
+              - script.execute: display_wake
+            else:
+              - script.execute: display_sleep
+
+esp8266:
+  board: nodemcuv2
+  # Keep the daily SMS counter in flash. The default is RTC memory, which is
+  # wiped by a power loss - and a brownout loop is exactly a series of those.
+  restore_from_flash: true
+
+logger:
+  level: INFO
+  baud_rate: 115200
+
+uart:
+  id: modem_uart
+  # The rate this modem answers at. Starting point only: the baud scan at the
+  # bottom of this file falls back to the other rates if it stays silent.
+  baud_rate: 19200
+  # README wiring: D8/GPIO15 is the ESP RX (SIM800L TX),
+  # D7/GPIO13 is the ESP TX (SIM800L RX).
+  rx_pin: GPIO15
+  tx_pin: GPIO13
+
+sim800l:
+  id: modem
+  uart_id: modem_uart
+  # The component gives up on a command, and re-sends a pending SMS, after
+  # three polls without an answer. A SIM800 may take up to 60 s to confirm an
+  # SMS, so the polls must be at least 30 s apart or a slow send is cut off
+  # and repeated.
+  update_interval: 30s
+  on_incoming_call:
+    - script.execute: reply_to_call
+  on_call_disconnected:
+    - lambda: 'id(in_call) = false;'
+
+one_wire:
+  - platform: gpio
+    pin: GPIO14
+    id: onewire_bus
+
+i2c:
+  sda: GPIO4
+  scl: GPIO5
+  scan: false
+  # At the default 50kHz one OLED frame blocks the main loop for ~300 ms.
+  frequency: 400kHz
+
+font:
+  - file: "fonts/RobotoMono-Regular.ttf"
+    id: font_small
+    size: 10
+    glyphs: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:!/-% "
+  - file: "fonts/RobotoMono-Regular.ttf"
+    id: font_temp
+    size: 18
+    glyphs: "0123456789.-C"
+
+display:
+  - platform: ssd1306_i2c
+    id: oled
+    model: "SSD1306 128x64"
+    address: 0x3C
+    contrast: 50%
+    update_interval: 2s
+    lambda: |-
+      const auto align = TextAlign::BASELINE_LEFT;
+
+      // Rows 0-15 are the yellow band of a two-colour panel: the header stays
+      // inside it, everything else goes below the separator.
+      if (std::isnan(id(temp).state)) {
+        it.print(0, 12, id(font_small), align, "SENSOR DISCONNECTED!");
+      } else {
+        it.print(0, 15, id(font_small), align, "TEMP:");
+        it.printf(40, 15, id(font_temp), align, "%.1fC", id(temp).state);
+      }
+      it.line(0, 16, 127, 16);
+
+      // No reading yet (NaN) and "not detectable" (99) both show as 0.
+      int rssi = id(gsm_rssi).state <= 31 ? (int) id(gsm_rssi).state : 0;
+      it.printf(0, 28, id(font_small), align, "GSM: %s",
+                id(modem_stage) == 0 ? "NO REPLY" : id(gsm_registered).state ? "OK" : "NO NETWORK");
+      it.printf(0, 39, id(font_small), align, "SIGNAL: %d/31", rssi);
+      it.rectangle(0, 42, 128, 8);
+      if (rssi > 0) {
+        it.filled_rectangle(1, 43, rssi * 126 / 31, 6);
+      }
+      it.printf(0, 62, id(font_small), align, "STATUS: %s", STATE_NAMES[id(state)]);
+
+output:
+  - platform: gpio
+    id: status_led
+    pin:
+      number: GPIO2
+      inverted: true
+
+binary_sensor:
+  - platform: sim800l
+    registered:
+      id: gsm_registered
+      name: "GSM Registered"
+
+  - platform: gpio
+    id: touch
+    name: "Touch"
+    pin:
+      number: GPIO12
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - if:
+          condition:
+            # One touch can register twice in quick succession, which turns
+            # the display on and straight off again: ignore presses for a
+            # second after a toggle.
+            lambda: |-
+              static uint32_t last_toggle = 0;
+              if (millis() - last_toggle < 1000) return false;
+              last_toggle = millis();
+              return true;
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(oled).is_on();'
+                then:
+                  - script.stop: display_wake
+                  - script.execute: display_sleep
+                else:
+                  - script.execute: display_wake
+
+sensor:
+  - platform: dallas_temp
+    id: temp
+    name: "Temperature"
+    one_wire_id: onewire_bus
+    resolution: 12
+    update_interval: 5min
+    on_value:
+      - lambda: |-
+          int s;
+          if (std::isnan(x)) {
+            // One failed read is usually a glitch; three in a row (about a
+            // minute, see the retry interval below) is a missing probe.
+            if (++id(read_failures) < 3) return;
+            s = 3;
+          } else {
+            id(read_failures) = 0;
+            // Widen the band we are already in by the hysteresis.
+            float hc = id(state) == 2 ? ${temp_hysteresis} : 0.0f;
+            float hw = id(state) == 1 || id(state) == 2 ? ${temp_hysteresis} : 0.0f;
+            if (x <= ${temp_critical_low} + hc || x >= ${temp_critical_high} - hc) {
+              s = 2;
+            } else if (x < ${temp_min} + hw || x > ${temp_max} - hw) {
+              s = 1;
+            } else {
+              s = 0;
+            }
+          }
+          if (s == id(state)) return;
+          id(state) = s;
+          id(status_led).set_state(s == 0);
+          id(alert_pending) = s != 0;
+      - script.execute: send_alert
+
+  - platform: sim800l
+    rssi:
+      id: gsm_rssi
+      name: "GSM RSSI"
+
+globals:
+  # Index into STATE_NAMES: 0 NORMAL, 1 WARNING, 2 CRITICAL, 3 DISCONNECTED.
+  - id: state
+    type: int
+    initial_value: "0"
+  - id: read_failures
+    type: int
+    initial_value: "0"
+  # Modem bring-up, see the 1s interval: 0 no reply yet, 1 answering and
+  # waiting for the network, 2 handed over to sim800l.
+  - id: modem_stage
+    type: int
+    initial_value: "0"
+  # An incoming call is still ringing.
+  - id: in_call
+    type: bool
+    initial_value: "false"
+  # The current state has not been reported by SMS yet.
+  - id: alert_pending
+    type: bool
+    initial_value: "false"
+  # SMS budget bookkeeping, in seconds of uptime.
+  - id: last_alert_s
+    type: uint32_t
+    initial_value: "0"
+  - id: alert_hour_start
+    type: uint32_t
+    initial_value: "0"
+  - id: alert_hour_count
+    type: int
+    initial_value: "0"
+  - id: alert_day_start
+    type: uint32_t
+    initial_value: "0"
+  - id: alert_day_count
+    type: int
+    restore_value: true
+    initial_value: "0"
+
+script:
+  # Sends the alert for the current state if one is owed and the budget allows.
+  # Runs on every reading and from the 30 s interval, so an alert held back by
+  # the cooldown, the hourly cap or a network outage goes out late, not never.
+  - id: send_alert
+    then:
+      - if:
+          condition:
+            lambda: |-
+              if (!id(alert_pending) || !id(gsm_registered).state) return false;
+              // Mid-glitch there is no temperature to report: wait for a good read.
+              if (id(state) != 3 && std::isnan(id(temp).state)) return false;
+
+              uint32_t now = millis_64() / 1000;
+              if (now - id(alert_hour_start) >= 3600) {
+                id(alert_hour_start) = now;
+                id(alert_hour_count) = 0;
+              }
+              if (now - id(alert_day_start) >= 86400) {
+                id(alert_day_start) = now;
+                id(alert_day_count) = 0;
+              }
+              if (id(alert_hour_count) >= ${alert_hour_max}) return false;
+              if (id(alert_day_count) >= ${alert_day_max}) return false;
+              if (id(last_alert_s) != 0 && now - id(last_alert_s) < ${alert_cooldown_s}) return false;
+
+              id(alert_pending) = false;
+              id(last_alert_s) = now;
+              id(alert_hour_count)++;
+              id(alert_day_count)++;
+              // Commit the daily count to flash before the modem transmits: if
+              // the TX burst browns the board out, the next boot must see it.
+              alert_day_count->update();
+              global_preferences->sync();
+              return true;
+          then:
+            - script.execute: send_sms
+
+  # Incoming call: hang up, then reply with the status SMS. The SMS must wait
+  # until the call is really gone - while it rings, every RING from the modem
+  # derails sim800l's SMS exchange. Single mode, so one call gets one reply.
+  - id: reply_to_call
+    then:
+      - lambda: 'id(in_call) = true;'
+      - sim800l.disconnect
+      - wait_until:
+          condition:
+            lambda: 'return !id(in_call);'
+          timeout: 1s
+      - if:
+          condition:
+            lambda: 'return id(in_call);'
+          then:
+            # ATH did not end it: AT+CHUP as the backup.
+            - uart.write:
+                id: modem_uart
+                data: "AT+CHUP\r\n"
+            - wait_until:
+                condition:
+                  lambda: 'return !id(in_call);'
+                timeout: 15s
+      - delay: 2s
+      - script.execute: send_sms
+
+  # The one SMS text, for alerts and call replies alike: temperature and
+  # status ("23.4C NORMAL"), or just "DISCONNECTED" when there is no reading.
+  - id: send_sms
+    then:
+      - sim800l.send_sms:
+          recipient: !secret phone_number
+          message: !lambda |-
+            if (std::isnan(id(temp).state)) return std::string(STATE_NAMES[3]);
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%.1fC %s", id(temp).state, STATE_NAMES[id(state)]);
+            return std::string(buf);
+
+  # Lights the OLED for display_timeout_s. While it is dark the display poller
+  # is stopped, so there is no I2C traffic and no rendering at all.
+  - id: display_wake
+    then:
+      - lambda: |-
+          id(oled).turn_on();
+          id(oled).start_poller();
+          id(oled).update();
+      - delay: ${display_timeout_s}s
+      - script.execute: display_sleep
+
+  - id: display_sleep
+    then:
+      - lambda: |-
+          id(oled).turn_off();
+          id(oled).stop_poller();
+
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          if (!std::isnan(id(temp).state)) return;
+          // No valid reading. Rescan the bus so a re-plugged or replaced probe
+          // is picked up, and count a missing one as another failed read.
+          id(onewire_bus).search();
+          if (id(onewire_bus).get_devices().empty()) {
+            id(temp).publish_state(NAN);
+          } else {
+            id(temp).set_address(0);
+            id(temp).setup();
+            id(temp).update();
+          }
+      - script.execute: send_alert
+
+  # Modem bring-up. sim800l on its own assumes a modem that already talks at
+  # the configured rate and is on the network, so it is held off the line (it
+  # would both talk and eat the replies) until this has, one step a second:
+  #   0. found the baud rate: "AT" until the modem answers "OK", ten tries at
+  #      the expected rate, then three at each of the others;
+  #   1. waited for network registration, up to 60 s.
+  - interval: 1s
+    then:
+      - lambda: |-
+          static const uint32_t RATES[] = {19200, 9600, 115200, 57600, 38400, 4800};
+          static uint8_t tries = 0, waited = 0;
+          if (id(modem_stage) == 2 || millis() < 6000) return;  // let the modem boot first
+
+          id(modem).stop_poller();
+          id(modem).disable_loop();
+
+          // Anything on the line is the reply to the previous command.
+          std::string reply;
+          uint8_t c;
+          while (id(modem_uart).available() && id(modem_uart).read_byte(&c)) reply += (char) c;
+
+          if (id(modem_stage) == 0) {
+            if (reply.find("OK") == std::string::npos) {
+              if (tries == 25) {
+                ESP_LOGW("modem", "No reply from the modem at any baud rate, scanning again");
+                tries = 0;
+              }
+              uint32_t rate = tries < 10 ? RATES[0] : RATES[(tries - 10) / 3 + 1];
+              tries++;
+              if (rate != id(modem_uart).get_baud_rate()) {
+                id(modem_uart).set_baud_rate(rate);
+                id(modem_uart).load_settings(false);
+              }
+              id(modem_uart).write_str("AT\r\n");
+              return;
+            }
+            ESP_LOGI("modem", "Modem answers at %u baud, waiting for the network",
+                     (unsigned) id(modem_uart).get_baud_rate());
+            id(modem_stage) = 1;
+            // Let ATH (sim800l.disconnect) hang up voice calls; with CVHU=1 the
+            // modem answers OK and keeps ringing.
+            id(modem_uart).write_str("AT+CVHU=0\r\n");
+            return;
+          }
+
+          // "+CREG: <n>,<stat>": stat 1 is registered, 5 is registered roaming.
+          size_t p = reply.find("+CREG: ");
+          bool registered = p != std::string::npos && reply.size() > p + 9 &&
+                            (reply[p + 9] == '1' || reply[p + 9] == '5');
+          if (!registered && waited++ < 60) {
+            id(modem_uart).write_str("AT+CREG?\r\n");
+            return;
+          }
+          if (registered) {
+            ESP_LOGI("modem", "Registered on the network after %u s", waited);
+          } else {
+            ESP_LOGW("modem", "Not registered after 60 s, carrying on");
+          }
+
+          id(modem_stage) = 2;
+          id(modem).enable_loop();
+          id(modem).start_poller();
+          // sim800l only opens its conversation on its third update(): do
+          // those now instead of waiting three poll intervals.
+          for (int i = 0; i < 3; i++) id(modem).update();
